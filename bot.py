@@ -1,37 +1,40 @@
 import logging
 import os
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    filters, ContextTypes, ConversationHandler
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+    ConversationHandler,
 )
-from openai import OpenAI
+import openai
 
-# Получаем ключи из переменных окружения
+# Загрузка переменных из .env
+load_dotenv()
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+openai.api_key = OPENAI_API_KEY
 
-# Этапы диалога
 GOAL, STATS = range(2)
 
 logging.basicConfig(level=logging.INFO)
 
-# Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Я твой тренер-бот. Напиши, какая у тебя цель: набор массы, сушка или сила?"
     )
     return GOAL
 
-# Получаем цель
 async def get_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['goal'] = update.message.text
     await update.message.reply_text("Теперь напиши свой рост и вес через пробел, например: 185 75")
     return STATS
 
-# Получаем рост и вес, отправляем запрос в OpenAI
 async def get_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         height, weight = map(int, update.message.text.split())
@@ -43,26 +46,26 @@ async def get_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"с акцентом на его цель."
         )
 
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=300,
             temperature=0.7,
         )
 
-        answer = response.choices[0].message.content
+        answer = response.choices[0].message["content"]
         await update.message.reply_text(answer)
+
     except Exception as e:
         await update.message.reply_text("Произошла ошибка. Проверь формат данных и попробуй снова.")
         print(e)
+
     return ConversationHandler.END
 
-# Отмена диалога
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Окей, отмена. Если хочешь начать заново — напиши /start.")
     return ConversationHandler.END
 
-# Запуск бота
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
